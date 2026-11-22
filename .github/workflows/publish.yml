@@ -1,0 +1,29 @@
+name: Publish APK releases
+on:
+  push:
+    branches: [main]
+    paths: ['parts/**', 'LATEST', '.github/workflows/publish.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Rebuild APKs and create missing releases
+        run: |
+          set -euo pipefail
+          latest=$(cat LATEST)
+          for dir in $(ls -d parts/v* | sort -V); do
+            v=$(basename "$dir")
+            if gh release view "$v" >/dev/null 2>&1; then echo "$v already released"; continue; fi
+            mkdir -p "out/$v"
+            cat "$dir"/hazri.apk.part-* > "out/$v/hazri.apk"
+            (cd "out/$v" && sha256sum -c "../../$dir/SHA256SUMS")
+            flag="--latest=false"; [ "$v" = "$latest" ] && flag="--latest"
+            gh release create "$v" "out/$v/hazri.apk" --title "Hazri $v" --notes "Android APK for Hazri $v." $flag
+          done
+          gh release edit "$latest" --latest
